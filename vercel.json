@@ -12,7 +12,9 @@
       "dest": "api/index.py"
     }
   ],
-  "env": {
-    "DUCKDB_HOME": "/tmp/.duckdb"
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60
+    }
   }
 }

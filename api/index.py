@@ -1,76 +1,178 @@
-import os
-import secrets
-from fastapi import FastAPI, Header, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import HTMLResponse, JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
+import duckdb
 
-app = FastAPI(
-    title="Hitek API Starter",
-    version="1.0.0",
-    description="A Vercel-ready FastAPI starter with API-key protection."
-)
+app = FastAPI()
 
-LANDING_PAGE = """<!doctype html>
+con = duckdb.connect()
+con.execute("INSTALL httpfs;")
+con.execute("LOAD httpfs;")
+
+LANDING_PAGE_HTML = """
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Hitek API Gateway</title>
-<style>
-:root{color-scheme:dark}*{box-sizing:border-box}
-body{margin:0;min-height:100vh;display:grid;place-items:center;
-background:radial-gradient(circle at 20% 20%,#073b39,#050811 55%);
-color:#e8fffb;font-family:system-ui,Arial,sans-serif}
-.card{width:min(92%,720px);padding:clamp(24px,5vw,52px);border:1px solid #18d9bd;
-border-radius:22px;background:#071416dd;box-shadow:0 0 50px #00d9b433}
-.badge{color:#52f5d7;font-size:.85rem;letter-spacing:.18em}
-h1{font-size:clamp(2rem,7vw,4rem);margin:.6rem 0}
-p{color:#b8d0d0;line-height:1.7}.pill{display:inline-block;padding:8px 12px;
-border:1px solid #227e73;border-radius:999px;color:#72f8df;margin:5px 5px 0 0}
-code{color:#8dffe9}
-</style></head>
-<body><main class="card">
-<div class="badge">H I T E K  /  A P I</div>
-<h1>API Gateway Online</h1>
-<p>Your FastAPI service is running. Use the health endpoint to check deployment.
-Protected endpoints require an API key configured in Vercel environment variables.</p>
-<span class="pill">FastAPI</span><span class="pill">Vercel-ready</span>
-<span class="pill">API-key protection</span>
-<p>Health check: <code>/health</code><br>API documentation: <code>/docs</code></p>
-</main></body></html>"""
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hitek Data Gateway - LIVE</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; color: #00ffcc; font-family: 'Courier New', Courier, monospace; }
+        #canvas-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
+        .overlay { 
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+            text-align: center; background: rgba(10, 10, 10, 0.85); padding: 50px; 
+            border: 1px solid #00ffcc; border-radius: 12px; box-shadow: 0 0 30px rgba(0, 255, 204, 0.3); 
+            backdrop-filter: blur(5px);
+        }
+        h1 { margin: 0 0 15px 0; font-size: 3.5em; text-transform: uppercase; letter-spacing: 6px; text-shadow: 0 0 15px #00ffcc; }
+        p { font-size: 1.2em; margin: 8px 0; color: #ccc; }
+        .highlight { color: #00ffcc; font-weight: bold; }
+        .status-box { 
+            margin-top: 30px; font-weight: bold; padding: 15px; 
+            border-radius: 8px; background: rgba(0, 255, 204, 0.1); 
+            border: 1px solid rgba(0, 255, 204, 0.5);
+            font-size: 1.1em;
+        }
+        .blinking { animation: blinker 1.5s linear infinite; display: inline-block; }
+        @keyframes blinker { 50% { opacity: 0; } }
+    </style>
+</head>
+<body>
+    <div id="canvas-container"></div>
+    <div class="overlay">
+        <h1>SYSTEM ONLINE</h1>
+        <p>API Gateway is <span class="highlight">Active & Secured</span></p>
+        <p>Parquet Cloud Engine: <span class="highlight">Connected</span></p>
+        <div class="status-box">
+            <span class="blinking" style="color: #00ffcc;">●</span> HTTP 200 OK - LISTENING FOR QUERIES
+        </div>
+    </div>
 
-def require_api_key(x_api_key: str | None) -> None:
-    expected = os.getenv("API_KEY")
-    if not expected:
-        # Fail closed: protected endpoints are unavailable until configured.
-        raise HTTPException(status_code=503, detail="API_KEY is not configured")
-    if not x_api_key or not secrets.compare_digest(x_api_key, expected):
-        raise HTTPException(status_code=401, detail="Invalid or missing API key")
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.getElementById('canvas-container').appendChild(renderer.domElement);
+
+        const geometry = new THREE.BufferGeometry();
+        const vertices = [];
+        for (let i = 0; i < 8000; i++) {
+            vertices.push(THREE.MathUtils.randFloatSpread(3000));
+            vertices.push(THREE.MathUtils.randFloatSpread(3000));
+            vertices.push(THREE.MathUtils.randFloatSpread(3000));
+        }
+        
+        geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
+        const material = new THREE.PointsMaterial({ color: 0x00ffcc, size: 2.5, transparent: true, opacity: 0.8 });
+        const points = new THREE.Points(geometry, material);
+        scene.add(points);
+
+        camera.position.z = 1200;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            points.rotation.x += 0.0005;
+            points.rotation.y += 0.001;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
+"""
+
+@app.exception_handler(StarletteHTTPException)
+async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    if exc.status_code == 404:
+        return JSONResponse(
+            status_code=404,
+            content={
+                "status": "rejected",
+                "message": "Invalid endpoint. STRICTLY use /FetchData?Number=XXXXXXXXXX",
+                "Developer": "@XCyberking"
+            }
+        )
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail, "Developer": "@XCyberking"}
+    )
 
 @app.get("/", response_class=HTMLResponse)
-def home():
-    return LANDING_PAGE
-
-@app.get("/health")
-def health():
-    return {"status": "ok", "service": "hitek-api"}
-
-@app.get("/api/example")
-def example(x_api_key: str | None = Header(default=None)):
-    require_api_key(x_api_key)
-    return {
-        "status": "ok",
-        "message": "Authenticated API is working.",
-        "data": []
-    }
+def root_landing_page():
+    return HTMLResponse(content=LANDING_PAGE_HTML, status_code=200)
 
 @app.get("/FetchData")
-def fetch_data(Number: str, x_api_key: str | None = Header(default=None)):
-    # Safe starter endpoint: does not query or expose personal-data datasets.
-    require_api_key(x_api_key)
-    if not Number.isdigit() or not 10 <= len(Number) <= 15:
-        raise HTTPException(status_code=400, detail="Number must contain 10–15 digits")
-    return {
-        "status": "not_configured",
-        "message": "Connect only a dataset you own or are authorized to process.",
-        "Data": {"Main_Records": [], "Alt_Records": []}
-    }
+def fetch_data(Number: str = Query(None)):
+    if not Number or not Number.isdigit() or len(Number) < 10 or len(Number) > 15:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "status": "rejected",
+                "message": "Invalid parameter. STRICTLY use /FetchData?Number=XXXXXXXXXX",
+                "Developer": "@XCyberking"
+            }
+        )
+    
+    last_digit = Number[-1]
+    
+    # Updated resolved URLs to match the Vinay-3309/my-hitek-backup bucket structure
+    primary_url = f"https://huggingface.co/buckets/Vinay-3309/my-hitek-backup/resolve/final_master_shard_{last_digit}.parquet?download=true"
+    alt_url = f"https://huggingface.co/buckets/Vinay-3309/my-hitek-backup/resolve/alt_master_shard_{last_digit}.parquet?download=true"
+    
+    try:
+        query = f"""
+            SELECT *, 'Main' AS _record_type FROM read_parquet('{primary_url}') WHERE mobile = '{Number}'
+            UNION ALL
+            SELECT *, 'Alt' AS _record_type FROM read_parquet('{alt_url}') WHERE alt = '{Number}'
+        """
+        
+        raw_results = con.execute(query).df().to_dict(orient="records")
+        
+        main_records = []
+        alt_records = []
+        
+        for row in raw_results:
+            rec_type = row.pop('_record_type')
+            if rec_type == 'Main':
+                main_records.append(row)
+            else:
+                alt_records.append(row)
+        
+        if not main_records and not alt_records:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "status": "not_found", 
+                    "phone": Number,
+                    "Developer": "@XCyberking"
+                }
+            )
+            
+        return {
+            "status": "success", 
+            "Data": {
+                "Main_Records": main_records,
+                "Alt_Records": alt_records
+            },
+            "Developer": "@XCyberking"
+        }
+        
+    except Exception as e:
+        return JSONResponse(
+            status_code=500,
+            content={
+                "status": "error",
+                "message": f"Database processing error: {str(e)}",
+                "Developer": "@XCyberking"
+            }
+        )

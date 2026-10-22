@@ -1,13 +1,10 @@
-from fastapi import FastAPI, Query, Request
+from fastapi import FastAPI, Query, Request, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
 import duckdb
+import os
+import pandas as pd
 
 app = FastAPI()
-
-con = duckdb.connect()
-con.execute("INSTALL httpfs;")
-con.execute("LOAD httpfs;")
 
 LANDING_PAGE_HTML = """
 <!DOCTYPE html>
@@ -91,8 +88,9 @@ LANDING_PAGE_HTML = """
 </html>
 """
 
-@app.exception_handler(StarletteHTTPException)
-async def custom_http_exception_handler(request: Request, exc: StarletteHTTPException):
+# Custom 404 handler matching original logic
+@app.exception_handler(HTTPException)
+async def custom_http_exception_handler(request: Request, exc: HTTPException):
     if exc.status_code == 404:
         return JSONResponse(
             status_code=404,
@@ -125,11 +123,21 @@ def fetch_data(Number: str = Query(None)):
     
     last_digit = Number[-1]
     
-    # Updated resolved URLs to match the Vinay-3309/my-hitek-backup bucket structure
     primary_url = f"https://huggingface.co/buckets/Vinay-3309/my-hitek-backup/resolve/final_master_shard_{last_digit}.parquet?download=true"
     alt_url = f"https://huggingface.co/buckets/Vinay-3309/my-hitek-backup/resolve/alt_master_shard_{last_digit}.parquet?download=true"
     
     try:
+        # LAZY CONNECT: Vercel serverless needs writable /tmp for DuckDB extension
+        os.environ['DUCKDB_HOME'] = '/tmp/.duckdb'
+        con = duckdb.connect(database=':memory:')
+        con.execute("INSTALL httpfs;")
+        con.execute("LOAD httpfs;")
+
+        # If the HuggingFace repo is private, uncomment below & add HF_TOKEN in Vercel env
+        # hf_token = os.environ.get("HF_TOKEN")
+        # if hf_token:
+        #     con.execute(f"SET hf_token='{hf_token}';")
+
         query = f"""
             SELECT *, 'Main' AS _record_type FROM read_parquet('{primary_url}') WHERE mobile = '{Number}'
             UNION ALL
@@ -137,6 +145,7 @@ def fetch_data(Number: str = Query(None)):
         """
         
         raw_results = con.execute(query).df().to_dict(orient="records")
+        con.close()
         
         main_records = []
         alt_records = []
